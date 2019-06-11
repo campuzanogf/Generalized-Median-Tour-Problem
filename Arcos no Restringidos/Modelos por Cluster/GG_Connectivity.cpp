@@ -262,14 +262,12 @@ public:
 				//Corte Connectivity
 
 				IloExpr Edge_in(X.getEnv());
-				IloExpr Edge_out(X.getEnv());
 				IloExpr Assing(y.getEnv());
 				for (int i = 0; i < S1.size(); i++)
 				{
 					for (int j = 0; j < S3.size(); j++)
 					{
-						Edge_in += X[S1[i]][S3[j]];
-						Edge_out += X[S3[j]][S1[i]];
+						Edge_in += X[S3[j]][S1[i]];
 					}
 
 					//asignaciones deben girar en torno al complemento del ciclo dentro del cluster
@@ -278,11 +276,10 @@ public:
 						Assing += y[S1[i]][S5[j]];
 					}
 				}
-				context.rejectCandidate(Edge_in + Edge_out + Assing >= 2);
+				context.rejectCandidate(Edge_in + Assing >= 1);
 				//cout << endl << "Corte: " << endl;
 				//cout << endl << Edge_in + Edge_out + Assing << " >= " <<  2 << endl;
 				Edge_in.end();
-				Edge_out.end();
 				Assing.end();
 
 				SEC++;
@@ -968,7 +965,7 @@ void Guardar(char *nombre, char resultados[50], IloCplex &Cplex, double &time, I
 	fstream salida2(resultados, ios::app);
 	if (salida2.is_open())
 	{
-		salida2 << instancia << "\t" << Cplex.getObjValue() << "\t" << Cplex.getMIPRelativeGap() << "\t" << Cplex.getNnodes() << "\t" << time << endl;
+		salida2 << instancia << "\t" << Cplex.getObjValue() << "\t" << Cplex.getMIPRelativeGap() << "\t" << time << "\t" << Cplex.getNnodes() << "\t" << SEC << endl;
 	}
 	else {
 		cerr << "Problemas guardando soluciones " << endl;

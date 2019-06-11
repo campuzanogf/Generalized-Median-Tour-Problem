@@ -618,7 +618,7 @@ void Guardar(char *nombre, char resultados[50], IloCplex &Cplex, double &time, I
 	fstream salida2(resultados, ios::app);
 	if (salida2.is_open())
 	{
-		salida2 << instancia << "\t" << Cplex.getObjValue() << "\t" << Cplex.getMIPRelativeGap() << "\t" << Cplex.getNnodes() << "\t" << time << endl;
+		salida2 << instancia << "\t" << Cplex.getObjValue() << "\t" << Cplex.getMIPRelativeGap() << "\t" << time << "\t" << Cplex.getNnodes() << endl;
 	}
 	else {
 		cerr << "Problemas guardando soluciones " << endl;

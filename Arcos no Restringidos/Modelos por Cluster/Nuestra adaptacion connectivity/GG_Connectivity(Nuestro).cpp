@@ -1,7 +1,7 @@
 /************************************************************************************
- * Este es un programa en C++ code para el TSP, formulacion con SECs, que se separan
- * mediante el algoritmo de corte mínimo de Stoer y Wagner
- ************************************************************************************/
+* Este es un programa en C++ code para el TSP, formulacion con SECs, que se separan
+* mediante el algoritmo de corte mínimo de Stoer y Wagner
+************************************************************************************/
 
 #include <iostream> // flujo de entrada y salida
 #include <fstream> // flujo de archivos
@@ -17,6 +17,7 @@
 #include <time.h>
 #include <ctime>
 
+
 using namespace std; // Espacio de nombres basico, para que todo funcione
 ILOSTLBEGIN // Espacio de nombres de CPL
 
@@ -24,7 +25,7 @@ struct Data // Estructura para almacenar los datos del problema
 {
 	int cardN;                 // cantidad de nodos
 	IloArray<IloNumArray> C;
-	IloNumArray SS;// Guardo cluster del nodo casillero
+	IloNumArray SS;// matriz de costos
 	IloNumArray id;// matriz de costos
 	IloNumArray x_cord;
 	IloNumArray y_cord;
@@ -32,17 +33,16 @@ struct Data // Estructura para almacenar los datos del problema
 	double time_solve;         // tiempo de resolucion
 	char data_filename[255];   // archivo de entrada
 	char output_filename[255]; // archivo de salida
-	IloArray<IloNumArray> Cluster;         // nodos de cada cluster
+	IloArray<IloNumArray> Cluster;         // nodos de cada cluster	
 	int clusterN;              // numero de clusteres
 };
 
 
 bool Load_data(IloEnv &env, char data_filename[255], Data &instance); // carga los datos de la instancia
-bool Create_MIP(Data &instance, IloModel &Model, IloArray<IloBoolVarArray> &X, IloArray<IloBoolVarArray> &y);  // crea el modelo instanciado
-bool MIP_solve(IloModel &Model, IloCplex &Cplex, Data &instance, IloArray<IloBoolVarArray> &X, IloArray<IloBoolVarArray> &y); // resuelve la instancia
+bool Create_MIP(Data &instance, IloModel &Model, IloArray<IloBoolVarArray> &X, IloArray<IloBoolVarArray> &y, IloArray<IloNumVarArray> &f);  // crea el modelo instanciado
+bool MIP_solve(IloModel &Model, IloCplex &Cplex, Data &instance, IloArray<IloBoolVarArray> &X, IloArray<IloBoolVarArray> &y, IloArray<IloNumVarArray> &f); // resuelve la instancia
 void Guardar(char *nombre, char resultados[50], IloCplex &Cplex, double &time, IloArray<IloBoolVarArray> &X, IloArray<IloBoolVarArray> &y);
-void Graficar_yed(char *nombre, Data &instance, IloCplex &Cplex, IloArray<IloBoolVarArray> &X, IloArray<IloBoolVarArray> &y, float &ZZ1, float &ZZ2);
-
+void Graficar_yed(char *nombre, Data &instance, IloCplex &Cplex, IloArray<IloBoolVarArray> &X, IloArray<IloNumVarArray> &f, IloArray<IloBoolVarArray> &y, float &ZZ1, float &ZZ2);
 
 // Elementosde trabajo
 double eps_rhs; // Tolerancia para lados derechos
@@ -89,35 +89,34 @@ public:
 		}
 
 		/*
-		 cout << endl << "Valores de X[i][j]" << endl;
-		 for (int i = 0; i < instance.cardN; i++)
-		 {
-		 for (int j = 0; j < instance.cardN; j++)
-		 {
-		 if (X_Sol[i][j] > eps_rhs)
-		 cout << endl << "X[" << i << "][" << j << "] = " << X_Sol[i][j];
-		 }
-		 }
+		cout << endl << "Valores de X[i][j]" << endl;
+		for (int i = 0; i < instance.cardN; i++)
+		{
+			for (int j = 0; j < instance.cardN; j++)
+			{
+				if (X_Sol[i][j] > eps_rhs)
+					cout << endl << "X[" << i << "][" << j << "] = " << X_Sol[i][j];
+			}
+		}
 
-		 cout << endl << "Valores de Y[i][j]" << endl;
-		 for (int i = 0; i < instance.cardN; i++)
-		 {
-		 for (int j = 0; j < instance.cardN; j++)
-		 {
-		 if (Y_Sol[i][j] > eps_rhs)
-		 cout << endl << "Y[" << i << "][" << j << "] = " << Y_Sol[i][j];
-		 }
-		 }
-		 getchar();
-		 getchar();
-		 */
+		cout << endl << "Valores de Y[i][j]" << endl;
+		for (int i = 0; i < instance.cardN; i++)
+		{
+			for (int j = 0; j < instance.cardN; j++)
+			{
+				if (Y_Sol[i][j] > eps_rhs)
+					cout << endl << "Y[" << i << "][" << j << "] = " << Y_Sol[i][j];
+			}
+		}
+		getchar();
+		getchar();
+		*/
 
-		 // Algoritmo de Separacion //
+		// Algoritmo de Separacion //
 		vector <int> S1; //Cilo identificado
 		vector <int> S2; //Nodos por revisar
 		vector <int> S3; //Complemento de S1
 		vector <int> S4; //Vector de cluster, al cual pertenecen los nodos(identificados)
-		vector <vector <int>> JJ; //almacena los nodos complementos de la ruta en los clusters
 		vector <int> S5; //Vector de cluster complemento, alcual pertenecen los nodos identificados
 		int l = 0; //contados que se utiliza en los cilos de S1, S2 y S3
 
@@ -202,30 +201,6 @@ public:
 					S4.push_back(instance.SS[S1[i]]);
 			}
 
-			//solo si tengo mas de un cluster identificado creo esta matriz
-
-			//Creo complemento de S1
-			JJ.clear(); //limpio siempre antes de ocupar
-			for (int p = 0; p < S4.size(); p++)
-			{
-				S5.clear();
-				for (int i = 0; i < instance.Cluster[S4[p]].getSize(); i++)
-				{
-					l = 0;
-					for (int j = 0; j < S1.size(); j++)
-					{
-						if (instance.Cluster[S4[p]][i] == S1[j])
-							l++;
-					}
-
-					if (l == 0)
-						S5.push_back(instance.Cluster[S4[p]][i]);
-				}
-				if (S5.size() >= 1)
-					JJ.push_back(S5);
-			}
-
-
 			// En S5 creo complemento de S1 en el cluster
 			S5.clear();
 			for (int i = 0; i < instance.Cluster[S4[0]].getSize(); i++)
@@ -241,7 +216,6 @@ public:
 			//elimino la ruta que se identifica el deposito
 			if (k == 0)
 			{
-				//JJ.clear();
 				S1.clear();
 				S3.clear();
 				S4.clear();
@@ -270,65 +244,46 @@ public:
 			 */
 
 			 //Condicion de Entrada: Ciclo cerrado, que no sea de un elemento y que no sea del tamaño de la red (TSP)
-			if (S1.size() >= 2 && S1.size() < instance.cardN)
+			if (S1.size() >= 2)
 			{
 				/*
-				cout << endl << "Ruta identificada:" << endl;
-				for (int i = 0; i < S1.size(); i++)
+				cout << endl << "cluster identificados: " << endl;
+				for (int p = 0; p < S4.size(); p++)
 				{
-					cout << " " << S1[i];
+					cout << endl;
+					for (int j = 0; j < instance.Cluster[S4[p]].getSize(); j++)
+					{
+						cout << " " << instance.Cluster[S4[p]][j];
+					}
 				}
 				cout << endl;
-
-				cout << endl << "Cluster identificado:" << endl;
-				for (int i = 0; i < S4.size(); i++)
-				{
-					for (int j = 0; j < instance.Cluster[S4[i]].getSize(); j++)
-					{
-						cout << " " << instance.Cluster[S4[i]][j];
-					}
-					cout << endl;
-				}
-
-				cout << endl << "Complemento en Cluster identificado (JJ.size() =" << JJ.size() <<")" << endl;
-				for (int i = 0; i < JJ.size(); i++)
-				{
-					for (int j = 0; j < JJ[i].size(); j++)
-					{
-						cout << " " << JJ[i][j];
-					}
-					cout << endl;
-				}
 				*/
 
-				// Corte connectivity //
+				//Corte Connectivity
+
 				IloExpr Edge_in(X.getEnv());
+				IloExpr Edge_out(X.getEnv());
+				IloExpr Assing(y.getEnv());
 				for (int i = 0; i < S1.size(); i++)
 				{
 					for (int j = 0; j < S3.size(); j++)
 					{
-						Edge_in += X[S3[j]][S1[i]];
+						Edge_in += X[S1[i]][S3[j]];
+						Edge_out += X[S3[j]][S1[i]];
 					}
-				}
 
-				//Asignaciones
-				IloExpr Assign_dep(y.getEnv());
-				for (int i = 0; i < S1.size(); i++)
-				{
-					for (int p = 0; p < JJ.size(); p++)
+					//asignaciones deben girar en torno al complemento del ciclo dentro del cluster
+					for (int j = 0; j < S5.size(); j++)
 					{
-						for (int j = 0; j < JJ[p].size(); j++)
-						{
-							Assign_dep += y[S1[i]][JJ[p][j]];
-						}
+						Assing += y[S1[i]][S5[j]];
 					}
 				}
-
-				context.rejectCandidate(Edge_in + Assign_dep >= 1);
+				context.rejectCandidate(Edge_in + Edge_out + Assing >= 2);
 				//cout << endl << "Corte: " << endl;
-				//cout << endl << Connectivity << " >= " <<  1 << endl;
+				//cout << endl << Edge_in + Edge_out + Assing << " >= " <<  2 << endl;
 				Edge_in.end();
-				Assign_dep.end();
+				Edge_out.end();
+				Assing.end();
 
 				SEC++;
 			}
@@ -365,6 +320,7 @@ public:
 	virtual ~FacilityCallback();
 };
 
+
 /* Implementation of the invoke function */
 void
 FacilityCallback::invoke(const IloCplex::Callback::Context &context)
@@ -400,10 +356,11 @@ int main(int argc, char **argv)
 				/* Crear variables de decision */
 				IloArray<IloBoolVarArray> X(env, instance.cardN); // X[i][j]
 				IloArray<IloBoolVarArray> y(env, instance.cardN); // y[i][j]
+				IloArray<IloNumVarArray> f(env, instance.clusterN); // f[i][j]
 
-				if (Create_MIP(instance, Model, X, y)) // crear el modelo de la instancia
+				if (Create_MIP(instance, Model, X, y, f)) // crear el modelo de la instancia
 				{
-					if (MIP_solve(Model, Cplex, instance, X, y)) // resolverlo
+					if (MIP_solve(Model, Cplex, instance, X, y, f)) // resolverlo
 					{
 						cout << "Estatus en palabras:" << Cplex.getCplexStatus() << endl;
 
@@ -465,8 +422,7 @@ int main(int argc, char **argv)
 								}
 
 							//Grafico soluciones
-							//Graficar_yed(argv[1], instance, Cplex, X, t, y, ZZ1, ZZ2);
-
+							//Graficar_yed(argv[1], instance, Cplex, X, f, y, ZZ1, ZZ2);
 						}
 
 					}
@@ -534,6 +490,18 @@ bool Load_data(IloEnv &env, char data_filename[255], Data &instance) // carga da
 			instance.C[i] = IloNumArray(env, instance.cardN);
 		}
 
+		//Leo Matriz de Costos parametros
+		/*
+		for (int i = 0; i < instance.cardN; i++)
+		{
+			for (int j = 0; j < instance.cardN; j++)
+			{
+				f_input >> instance.C[i][j];
+			}
+		}
+		*/
+		//Creo matriz de costos
+
 		for (int i = 0; i < instance.cardN; i++)
 		{
 			for (int j = 0; j < instance.cardN; j++)
@@ -541,6 +509,7 @@ bool Load_data(IloEnv &env, char data_filename[255], Data &instance) // carga da
 				instance.C[i][j] = sqrt(pow(instance.x_cord[j] - instance.x_cord[i], 2) + pow(instance.y_cord[j] - instance.y_cord[i], 2));
 			}
 		}
+
 
 		f_input >> instance.clusterN; // lee numero de cluster..
 
@@ -611,39 +580,38 @@ bool Load_data(IloEnv &env, char data_filename[255], Data &instance) // carga da
 
 		// Mostrar datos
 		/*
-		 cout << endl << "Cardinalidad: " << instance.cardN << endl;
+		cout << endl << "Cardinalidad: " << instance.cardN << endl;
 
-		 cout << endl << "id cord(X) cord(y):";
+		cout << endl << "id cord(X) cord(y):";
 
-		 for (int i = 0; i < instance.cardN; i++)
-		 {
-		 cout << endl << " " << instance.id[i] << " " << instance.x_cord[i] << " " << instance.y_cord[i];
-		 }
+		for (int i = 0; i < instance.cardN; i++)
+		{
+			cout << endl << " " << instance.id[i] << " " << instance.x_cord[i] << " " << instance.y_cord[i];
+		}
 
-		 cout << endl << "Matriz de costos:" << endl;
-		 for (int i = 0; i < instance.cardN; i++)
-		 {
-		 for (int j = 0; j < instance.cardN; j++)
-		 {
-		 cout << " " << instance.C[i][j];
-		 }
-		 cout << endl;
-		 }
+		cout << endl << "Matriz de costos:" << endl;
+		for (int i = 0; i < instance.cardN; i++)
+		{
+			for (int j = 0; j < instance.cardN; j++)
+			{
+				cout << " " << instance.C[i][j];
+			}
+			cout << endl;
+		}
 
-		 cout << endl << "Clusters: " << instance.clusterN << endl;
+		cout << endl << "Clusters: " << instance.clusterN << endl;
+		cout << endl << "Matriz de clusters: " << endl;
+		for (int i = 0; i < instance.Cluster.getSize(); i++)
+		{
+			for (int j = 0; j < instance.Cluster[i].getSize(); j++)
+			{
+				cout << " " << instance.Cluster[i][j];
+			}
+			cout << endl;
+		}
+		*/
 
-		 cout << endl << "Matriz de clusters: " << endl;
-		 for (int i = 0; i < instance.Cluster.getSize(); i++)
-		 {
-		 for (int j = 0; j < instance.Cluster[i].getSize(); j++)
-		 {
-		 cout << " " << instance.Cluster[i][j];
-		 }
-		 cout << endl;
-		 }
-
-		 */
-		 // Asymmetric Instance
+		// Asymmetric Instance
 
 
 		return true; // retornar el valor de que lo logro
@@ -655,7 +623,7 @@ bool Load_data(IloEnv &env, char data_filename[255], Data &instance) // carga da
 	}
 }
 
-bool Create_MIP(Data &instance, IloModel &Model, IloArray<IloBoolVarArray> &X, IloArray<IloBoolVarArray> &y) // crea la instancia del modelo
+bool Create_MIP(Data &instance, IloModel &Model, IloArray<IloBoolVarArray> &X, IloArray<IloBoolVarArray> &y, IloArray<IloNumVarArray> &f) // crea la instancia del modelo
 {
 	IloEnv env = Model.getEnv(); // cachar el entorno actual
 	char varName[50]; // arreglo de caracteres para ponerle nombre a las variables    OJO depende del tamaño de la red
@@ -706,6 +674,22 @@ bool Create_MIP(Data &instance, IloModel &Model, IloArray<IloBoolVarArray> &X, I
 				}
 			}
 		}
+	}
+
+	//f_ij
+	f = IloArray<IloNumVarArray>(env, instance.clusterN);
+
+	for (int i = 0; i < instance.clusterN; ++i) // cada fila
+	{
+		f[i] = IloNumVarArray(env, instance.clusterN, 0, instance.clusterN); // es un arreglo de N variables clusterdN
+		for (int j = 0; j < instance.clusterN; ++j)
+		{
+			sprintf(varName, "f[%d,%d]", i, j); // Ponerle nombre a cada variable
+			f[i][j].setName(varName);
+			if (i == j)
+				f[i][j].setBounds(0, 0);
+		}
+		Model.add(f[i]); // Agregarla al modelo
 	}
 
 	cout << endl << "Definicion de variables ok" << endl;
@@ -793,6 +777,21 @@ bool Create_MIP(Data &instance, IloModel &Model, IloArray<IloBoolVarArray> &X, I
 		In_deeg.end();
 	}
 
+	// Restriccion (5) el tour tiene tantos arcos como cluster hay. Co esta restriccion se impone que el tour visita un solo nodo de cada cluster 
+	/*
+	IloExpr arcs(env);
+	for (int i = 0; i < instance.cardN; ++i)
+	{
+		for (int j = 0; j < instance.cardN; ++j)
+		{
+			if (i != j)
+				arcs += X[i][j];
+		}
+	}
+	Model.add(arcs >= instance.clusterN); //
+	arcs.end();
+	*/
+
 	// Restriccion (6) todos los nodos de un cluster son asignados al paradero dentro del cluster
 	for (int p = 0; p < instance.clusterN; ++p)
 	{
@@ -803,7 +802,7 @@ bool Create_MIP(Data &instance, IloModel &Model, IloArray<IloBoolVarArray> &X, I
 			{
 				Assigns += y[instance.Cluster[p][i]][instance.Cluster[p][j]];
 			}
-			Model.add(Assigns == 1); //
+			Model.add(Assigns == 1);
 			Assigns.end();
 		}
 	}
@@ -821,12 +820,12 @@ bool Create_MIP(Data &instance, IloModel &Model, IloArray<IloBoolVarArray> &X, I
 					arcs += X[i][instance.Cluster[p][j]];
 				}
 			}
-			Model.add(arcs == y[instance.Cluster[p][j]][instance.Cluster[p][j]]); //
+			Model.add(arcs == y[instance.Cluster[p][j]][instance.Cluster[p][j]]); // 
 			arcs.end();
 		}
 	}
 
-	// Restriccion (8)
+	// Restriccion (8)	   
 	for (int p = 0; p < instance.clusterN; ++p)
 	{
 		for (int i = 0; i < instance.Cluster[p].getSize(); ++i)
@@ -835,19 +834,68 @@ bool Create_MIP(Data &instance, IloModel &Model, IloArray<IloBoolVarArray> &X, I
 			{
 				if (i != j)
 				{
-					Model.add(y[instance.Cluster[p][i]][instance.Cluster[p][j]] <= y[instance.Cluster[p][j]][instance.Cluster[p][j]]); //
+					Model.add(y[instance.Cluster[p][i]][instance.Cluster[p][j]] <= y[instance.Cluster[p][j]][instance.Cluster[p][j]]); // 
 				}
 			}
 		}
 	}
 
 	cout << endl << "Restricciones de asignacion OK " << endl;
+	/**************Restriciones de Flujo (por cluster)***************/
 
+	// Restriccion (9): Flujo que sae del deposito
+	IloExpr Out_depot(env);
+	for (int p = 1; p < instance.clusterN; ++p)
+	{
+		Out_depot += f[0][p];
+	}
+	Model.add(Out_depot == instance.clusterN - 1); // sum{p} f_0p = 1 
+	Out_depot.end();
+
+	// Restriccion (10): de balance de flujo
+	for (int q = 1; q < instance.clusterN; ++q)
+	{
+		IloExpr In_cluster(env);
+		IloExpr Out_cluster(env);
+		for (int p = 0; p < instance.clusterN; ++p)
+		{
+			if (p != q) {
+				In_cluster += f[p][q];
+				Out_cluster += f[q][p];
+			}
+		}
+		Model.add(In_cluster == 1 + Out_cluster); // sum{p} f_qp = 1 + sum{p} f_pq, para todo q
+		In_cluster.end();
+		Out_cluster.end();
+	}
+
+	// Restriccion (11): Si no existe el arco, no existe flujo entre clusters
+	for (int p = 0; p < instance.clusterN; ++p)
+	{
+		for (int q = 0; q < instance.clusterN; ++q)
+		{
+			if (p != q)
+			{
+				IloExpr arcs(env);
+				for (int i = 0; i < instance.Cluster[p].getSize(); ++i)
+				{
+					for (int j = 0; j < instance.Cluster[q].getSize(); ++j)
+					{
+						arcs += X[instance.Cluster[p][i]][instance.Cluster[q][j]];
+					}
+				}
+				Model.add(f[p][q] <= (instance.clusterN - 1) * arcs);
+				arcs.end();
+			}
+		}
+	}
+
+	cout << endl << "Restricciones de flujo por cluster OK " << endl;
 
 	return true;
 }
 
-bool MIP_solve(IloModel &Model, IloCplex &Cplex, Data &instance, IloArray<IloBoolVarArray> &X, IloArray<IloBoolVarArray> &y)
+bool MIP_solve(IloModel &Model, IloCplex &Cplex, Data &instance, IloArray<IloBoolVarArray> &X, IloArray<IloBoolVarArray> &y, IloArray<IloNumVarArray> &f)
 {
 
 	//cout << "MIP_solve" << endl;
@@ -863,30 +911,31 @@ bool MIP_solve(IloModel &Model, IloCplex &Cplex, Data &instance, IloArray<IloBoo
 	Cplex.setParam(IloCplex::ParallelMode, IloCplex::Deterministic);
 	Cplex.setParam(IloCplex::Param::MIP::Tolerances::MIPGap, 0.0);
 	/*
-	 cplex_MIP.setParam(IloCplex::MIPSearch, IloCplex::Traditional);//B&B tradicional (no busqueda dinamica)
-	 cplex_MIP.setParam(IloCplex::ParallelMode, IloCplex::Deterministic);//B&B deterministico(no oportunista)
+	cplex_MIP.setParam(IloCplex::MIPSearch, IloCplex::Traditional);//B&B tradicional (no busqueda dinamica)
+	cplex_MIP.setParam(IloCplex::ParallelMode, IloCplex::Deterministic);//B&B deterministico(no oportunista)
 
-	 cplex_MIP.setParam(IloCplex::MIPDisplay, 2);
-	 cplex_MIP.setParam(IloCplex::Threads, 1);
-	 cplex_MIP.setParam(IloCplex::MIPSearch, 1);
-	 cplex_MIP.setParam(IloCplex::PreInd, 0);
-	 cplex_MIP.setParam(IloCplex::CutsFactor, 0);
-	 cplex_MIP.setParam(IloCplex::Cliques, -1);
-	 cplex_MIP.setParam(IloCplex::Covers, -1);
-	 cplex_MIP.setParam(IloCplex::DisjCuts, -1);
-	 cplex_MIP.setParam(IloCplex::FlowCovers, -1);
-	 cplex_MIP.setParam(IloCplex::FlowPaths, -1);
-	 cplex_MIP.setParam(IloCplex::FracCuts, -1);
-	 cplex_MIP.setParam(IloCplex::GUBCovers, -1);
-	 cplex_MIP.setParam(IloCplex::ImplBd, -1);
-	 cplex_MIP.setParam(IloCplex::MIRCuts, -1);
-	 cplex_MIP.setParam(IloCplex::ZeroHalfCuts, -1);
-	 cplex_MIP.setParam(IloCplex::EachCutLim, 0);
-	 cplex_MIP.setParam(IloCplex::CutPass, -1);
-	 cplex_MIP.setParam(IloCplex::HeurFreq, -1);
-	 */
+	cplex_MIP.setParam(IloCplex::MIPDisplay, 2);
+	cplex_MIP.setParam(IloCplex::Threads, 1);
+	cplex_MIP.setParam(IloCplex::MIPSearch, 1);
+	cplex_MIP.setParam(IloCplex::PreInd, 0);
+	cplex_MIP.setParam(IloCplex::CutsFactor, 0);
+	cplex_MIP.setParam(IloCplex::Cliques, -1);
+	cplex_MIP.setParam(IloCplex::Covers, -1);
+	cplex_MIP.setParam(IloCplex::DisjCuts, -1);
+	cplex_MIP.setParam(IloCplex::FlowCovers, -1);
+	cplex_MIP.setParam(IloCplex::FlowPaths, -1);
+	cplex_MIP.setParam(IloCplex::FracCuts, -1);
+	cplex_MIP.setParam(IloCplex::GUBCovers, -1);
+	cplex_MIP.setParam(IloCplex::ImplBd, -1);
+	cplex_MIP.setParam(IloCplex::MIRCuts, -1);
+	cplex_MIP.setParam(IloCplex::ZeroHalfCuts, -1);
+	cplex_MIP.setParam(IloCplex::EachCutLim, 0);
+	cplex_MIP.setParam(IloCplex::CutPass, -1);
+	cplex_MIP.setParam(IloCplex::HeurFreq, -1);
+	*/
 
-	 //aplico cortes enteros
+
+	//aplico cortes enteros
 	eps_rhs = Cplex.getParam(IloCplex::EpRHS);
 
 	FacilityCallback fcCallback(X, y, instance);
@@ -928,8 +977,7 @@ void Guardar(char *nombre, char resultados[50], IloCplex &Cplex, double &time, I
 	salida2.close();
 }
 
-
-void Graficar_yed(char *nombre, Data &instance, IloCplex &Cplex, IloArray<IloBoolVarArray> &X, IloArray<IloBoolVarArray> &y, float &ZZ1, float &ZZ2)
+void Graficar_yed(char *nombre, Data &instance, IloCplex &Cplex, IloArray<IloBoolVarArray> &X, IloArray<IloNumVarArray> &f, IloArray<IloBoolVarArray> &y, float &ZZ1, float &ZZ2)
 {
 	IloEnv env = Cplex.getEnv();
 	//paso valores de variables

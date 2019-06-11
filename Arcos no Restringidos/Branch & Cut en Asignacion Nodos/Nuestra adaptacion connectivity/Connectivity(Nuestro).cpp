@@ -303,10 +303,12 @@ public:
 
 				// Corte connectivity //
 				IloExpr Edge_in(X.getEnv());
+				IloExpr Edge_out(X.getEnv());
 				for (int i = 0; i < S1.size(); i++)
 				{
 					for (int j = 0; j < S3.size(); j++)
 					{
+						Edge_out += X[S1[i]][S3[j]];
 						Edge_in += X[S3[j]][S1[i]];
 					}
 				}
@@ -324,12 +326,13 @@ public:
 					}
 				}
 
-				context.rejectCandidate(Edge_in + Assign_dep >= 1);
+				context.rejectCandidate(Edge_in + Edge_out +  Assign_dep >= 2);
 				//cout << endl << "Corte: " << endl;
 				//cout << endl << Connectivity << " >= " <<  1 << endl;
 				Edge_in.end();
+				Edge_out.end();
 				Assign_dep.end();
-
+				
 				SEC++;
 			}
 
