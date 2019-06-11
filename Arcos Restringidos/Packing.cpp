@@ -818,18 +818,6 @@ bool Create_MIP(Data &instance, IloModel &Model, IloArray<IloBoolVarArray> &X, I
 		}
 	}
 
-	//Restriccion que elimina ciclos de dos nodos
-	for (int i = 1; i < instance.cardN; i++)
-	{
-		for (int j = 1; j < instance.cardN; j++)
-		{
-			if (j != i)
-			{
-				Model.add(X[i][j] + X[j][i] <= 1);
-			}
-		}
-	}
-
 	cout << endl << "Restricciones de asignacion OK " << endl;
 
 	return true;

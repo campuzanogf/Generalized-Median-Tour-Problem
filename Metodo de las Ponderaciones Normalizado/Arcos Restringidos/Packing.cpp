@@ -39,14 +39,20 @@ struct Data // Estructura para almacenar los datos del problema
 
 
 bool Load_data(IloEnv &env, char data_filename[255], Data &instance); // carga los datos de la instancia
-bool Create_MIP(Data &instance, IloModel &Model, IloArray<IloBoolVarArray> &X, IloArray<IloBoolVarArray> &y, IloArray<IloNumVarArray> &f);  // crea el modelo instanciado
-bool MIP_solve(IloModel &Model, IloCplex &Cplex, Data &instance, IloArray<IloBoolVarArray> &X, IloArray<IloBoolVarArray> &y, IloArray<IloNumVarArray> &f); // resuelve la instancia
-void Guardar(char *nombre, char resultados[50], IloCplex &Cplex, double &time, IloArray<IloBoolVarArray> &X, IloArray<IloBoolVarArray> &y);
-void Graficar_yed(char *nombre, Data &instance, IloCplex &Cplex, IloArray<IloBoolVarArray> &X, IloArray<IloNumVarArray> &f, IloArray<IloBoolVarArray> &y, float &ZZ1, float &ZZ2);
+bool Create_MIP(Data &instance, IloModel &Model, IloArray<IloBoolVarArray> &X, IloArray<IloBoolVarArray> &y);  // crea el modelo instanciado
+bool MIP_solve(IloModel &Model, IloCplex &Cplex, Data &instance, IloArray<IloBoolVarArray> &X, IloArray<IloBoolVarArray> &y); // resuelve la instancia
+void Guardar(char *nombre, char resultados[50], char rutas[50], IloCplex &Cplex, double &time, IloArray<IloBoolVarArray> &X, IloArray<IloBoolVarArray> &y);
+void Graficar_yed(char *nombre, Data &instance, IloCplex &Cplex, IloArray<IloBoolVarArray> &X, IloArray<IloBoolVarArray> &y, float &ZZ1, float &ZZ2);
 
 // Elementosde trabajo
 double eps_rhs; // Tolerancia para lados derechos
 int SEC = 0;
+double w1 = 0.0; //ponderador de Rutas (Z1)
+double w2 = 0.0; //ponderador de Asignaciones (Z2)
+double Z1 = 0.0; //valor de Rutas (Z1)
+double Z2 = 0.0; //valor de Asignaciones (Z2)
+
+
 
 class FacilityCallback : public IloCplex::Callback::Function {
 private:
@@ -211,35 +217,38 @@ public:
 			if (S1.size() >= 2 && S1.size() < instance.clusterN)
 			{
 				/*
-				 cout << endl << "cluster identificados: " << endl;
-				 for (int p = 0; p < S4.size(); p++)
-				 {
-				 cout << endl;
-				 for (int j = 0; j < instance.Cluster[S4[p]].getSize(); j++)
-				 {
-				 cout << " " << instance.Cluster[S4[p]][j];
-				 }
-				 }
-				 cout << endl;
-				 */
-				IloExpr Connectivity(X.getEnv());
+				cout << endl << "cluster identificados: " << endl;
 				for (int p = 0; p < S4.size(); p++)
 				{
+					cout << endl;
+					for (int j = 0; j < instance.Cluster[S4[p]].getSize(); j++)
+					{
+						cout << " " << instance.Cluster[S4[p]][j];
+					}
+				}
+				cout << endl;
+				*/
+				IloNum S = 0;
+				IloExpr Packing(X.getEnv());
+				for (int p = 0; p < S4.size(); p++)
+				{
+					S++;
 					for (int i = 0; i < instance.Cluster[S4[p]].getSize(); i++)
 					{
-						for (int q = 0; q < S5.size(); q++)
+						for (int q = 0; q < S4.size(); q++)
 						{
-							for (int j = 0; j < instance.Cluster[S5[q]].getSize(); j++)
-							{
-								Connectivity += X[instance.Cluster[S4[p]][i]][instance.Cluster[S5[q]][j]];
-							}
+							if (q != p)
+								for (int j = 0; j < instance.Cluster[S4[q]].getSize(); j++)
+								{
+									Packing += X[instance.Cluster[S4[p]][i]][instance.Cluster[S4[q]][j]];
+								}
 						}
 					}
 				}
-				context.rejectCandidate(Connectivity >= 1);
+				context.rejectCandidate(Packing <= S - 1);
 				//cout << endl << "Corte: " << endl;
-				//cout << endl << Connectivity << " >= " << 1 << endl;
-				Connectivity.end();
+				//cout << endl << Packing << " <= " << S - 1 << endl;
+				Packing.end();
 				SEC++;
 
 			}
@@ -297,7 +306,7 @@ int main(int argc, char **argv)
 	IloEnv env; // Crear el entorno
 	try // ejecutar lo siguiente, alegar si no es el caso
 	{
-		if (argc == 3) // si se pasan los comandos de la forma 'ejecutable archivo_entrada archivo_salida'
+		if (argc == 6) // si se pasan los comandos de la forma 'ejecutable archivo_entrada archivo_salida'
 		{
 			Data instance;	// crear donde se almacenan los datos
 
@@ -310,11 +319,15 @@ int main(int argc, char **argv)
 				/* Crear variables de decision */
 				IloArray<IloBoolVarArray> X(env, instance.cardN); // X[i][j]
 				IloArray<IloBoolVarArray> y(env, instance.cardN); // y[i][j]
-				IloArray<IloNumVarArray> f(env, instance.clusterN); // f[i][j]
 
-				if (Create_MIP(instance, Model, X, y, f)) // crear el modelo de la instancia
+				//Cargo poderadores
+				w1 = atof(argv[2]);
+				w2 = atof(argv[3]);
+
+
+				if (Create_MIP(instance, Model, X, y)) // crear el modelo de la instancia
 				{
-					if (MIP_solve(Model, Cplex, instance, X, y, f)) // resolverlo
+					if (MIP_solve(Model, Cplex, instance, X, y)) // resolverlo
 					{
 						cout << "Estatus en palabras:" << Cplex.getCplexStatus() << endl;
 
@@ -350,8 +363,29 @@ int main(int argc, char **argv)
 							cout << "Cortes Generados: " << SEC << endl; // que se calcula y muestra
 							cout << "Solucion optima del problema Z = " << Cplex.getObjValue() << endl;
 
+							for (int i = 0; i < instance.cardN; i++)
+							{
+								for (int j = 0; j < instance.cardN; j++)
+								{
+									if (j != i && Cplex.getValue(X[i][j]) > eps_rhs)
+										Z1 += instance.C[i][j] * Cplex.getValue(X[i][j]);
+								}
+							}
+
+							for (int i = 0; i < instance.cardN; i++)
+							{
+								for (int j = 0; j < instance.cardN; j++)
+								{
+									if (j != i && Cplex.getValue(y[i][j]) > eps_rhs)
+										Z2 += instance.C[i][j] * Cplex.getValue(y[i][j]);
+								}
+							}
+
+							cout << "Valor de Ruta (Z1): " << Z1 << endl;
+							cout << "Valor de ASignaciones (Z2): " << Z2 << endl;
+
 							//guardar valores
-							Guardar(argv[1], argv[2], Cplex, time, X, y);
+							Guardar(argv[1], argv[5], argv[4], Cplex, time, X, y);
 
 							//creo valores de funciones objetvos
 							float ZZ1;
@@ -377,7 +411,7 @@ int main(int argc, char **argv)
 								}
 
 							//Grafico soluciones
-							//Graficar_yed(argv[1], instance, Cplex, X, f, y, ZZ1, ZZ2);
+							//Graficar_yed(argv[1], instance, Cplex, X, y, ZZ1, ZZ2);
 						}
 
 					}
@@ -403,7 +437,7 @@ int main(int argc, char **argv)
 		else
 		{
 			// error con el formato de la linea de comandos
-			cout << "Error Entrada, use formato: [Ejecutable] [Instancia] [Soluciones]" << endl;
+			cout << "Error Entrada, use formato: [Ejecutable] [Instancia] [Ponderador de Z1 (w1)] [Ponderador de Z2 (w2)] [Rutas] [Soluciones]" << endl;
 		}
 
 	}
@@ -457,7 +491,7 @@ bool Load_data(IloEnv &env, char data_filename[255], Data &instance) // carga da
 		*/
 
 		//Creo matriz de costos
-
+		
 		for (int i = 0; i < instance.cardN; i++)
 		{
 			for (int j = 0; j < instance.cardN; j++)
@@ -465,7 +499,7 @@ bool Load_data(IloEnv &env, char data_filename[255], Data &instance) // carga da
 				instance.C[i][j] = sqrt(pow(instance.x_cord[j] - instance.x_cord[i], 2) + pow(instance.y_cord[j] - instance.y_cord[i], 2));
 			}
 		}
-
+		
 
 		f_input >> instance.clusterN; // lee numero de cluster..
 
@@ -598,7 +632,7 @@ bool Load_data(IloEnv &env, char data_filename[255], Data &instance) // carga da
 	}
 }
 
-bool Create_MIP(Data &instance, IloModel &Model, IloArray<IloBoolVarArray> &X, IloArray<IloBoolVarArray> &y, IloArray<IloNumVarArray> &f) // crea la instancia del modelo
+bool Create_MIP(Data &instance, IloModel &Model, IloArray<IloBoolVarArray> &X, IloArray<IloBoolVarArray> &y) // crea la instancia del modelo
 {
 	IloEnv env = Model.getEnv(); // cachar el entorno actual
 	char varName[50]; // arreglo de caracteres para ponerle nombre a las variables    OJO depende del tama“o de la red
@@ -651,22 +685,6 @@ bool Create_MIP(Data &instance, IloModel &Model, IloArray<IloBoolVarArray> &X, I
 		}
 	}
 
-	//f_ij
-	f = IloArray<IloNumVarArray>(env, instance.clusterN);
-
-	for (int i = 0; i < instance.clusterN; ++i) // cada fila
-	{
-		f[i] = IloNumVarArray(env, instance.clusterN, 0, instance.clusterN); // es un arreglo de N variables clusterdN
-		for (int j = 0; j < instance.clusterN; ++j)
-		{
-			sprintf(varName, "f[%d,%d]", i, j); // Ponerle nombre a cada variable
-			f[i][j].setName(varName);
-			if (i == j)
-				f[i][j].setBounds(0, 0);
-		}
-		Model.add(f[i]); // Agregarla al modelo
-	}
-
 	cout << endl << "Definicion de variables ok" << endl;
 
 	//Definir FO del problema
@@ -678,7 +696,7 @@ bool Create_MIP(Data &instance, IloModel &Model, IloArray<IloBoolVarArray> &X, I
 				Obj1 += (instance.C[i][j] * X[i][j]);
 				Obj2 += (instance.C[i][j] * y[i][j]);
 			}
-	Model.add(IloMinimize(env, Obj1 + Obj2)); // Z = min FO
+	Model.add(IloMinimize(env, w1 * ((Obj1 - 4094) / 312) + w2 * ((Obj2 - 1845) / 467))); // Z = min FO
 	Obj1.end();                            // cerrar la expresion
 	Obj2.end();                            // cerrar la expresion
 
@@ -818,7 +836,7 @@ bool Create_MIP(Data &instance, IloModel &Model, IloArray<IloBoolVarArray> &X, I
 	return true;
 }
 
-bool MIP_solve(IloModel &Model, IloCplex &Cplex, Data &instance, IloArray<IloBoolVarArray> &X, IloArray<IloBoolVarArray> &y, IloArray<IloNumVarArray> &f)
+bool MIP_solve(IloModel &Model, IloCplex &Cplex, Data &instance, IloArray<IloBoolVarArray> &X, IloArray<IloBoolVarArray> &y)
 {
 
 	//cout << "MIP_solve" << endl;
@@ -877,7 +895,7 @@ bool MIP_solve(IloModel &Model, IloCplex &Cplex, Data &instance, IloArray<IloBoo
 }
 
 
-void Guardar(char *nombre, char resultados[50], IloCplex &Cplex, double &time, IloArray<IloBoolVarArray> &X, IloArray<IloBoolVarArray> &y)
+void Guardar(char *nombre, char resultados[50], char rutas[50], IloCplex &Cplex, double &time, IloArray<IloBoolVarArray> &X, IloArray<IloBoolVarArray> &y)
 {
 	string instancia; //guarda nombre de la instancia
 	int i = 0;
@@ -887,10 +905,40 @@ void Guardar(char *nombre, char resultados[50], IloCplex &Cplex, double &time, I
 		i++;
 	}
 
+	fstream salida1(rutas, ios::app);
+	if (salida1.is_open())
+	{
+		salida1 << endl << "Instancia: " << instancia << " con ponderaciones: w1 = " << w1 << " w2 = " << w2;
+		salida1 << endl << "Valor de Ruta (Z1): " << Z1;
+		salida1 << endl << "Valor de Asignaciones (Z2): " << Z2;
+		int i = 0, j = 1;
+		salida1 << 0;
+		do
+		{
+			while (max(0.0, Cplex.getValue(X[i][j])) <= 0.98)
+			{
+				++j;
+			}
+			salida1 << " -> " << j;
+			i = j;
+			j = 0;
+		} while (i != 0);
+		salida1 << endl;
+	}
+	else {
+		cerr << "Problemas guardando rutas " << endl;
+	}
+
 	fstream salida2(resultados, ios::app);
 	if (salida2.is_open())
 	{
-		salida2 << instancia << "\t" << Cplex.getObjValue() << "\t" << Cplex.getMIPRelativeGap() << "\t" << time << "\t" << Cplex.getNnodes() << "\t" << SEC << endl;
+		salida2 << instancia << "\t" << "Z(Z1+Z2):" << "\t" << Z1 + Z2
+			<< "\t" << "w1:" << "\t" << w1 << "\t" << "w2:" << "\t" << w2 << "\t"
+			<< "\t" << "Z1:" << "\t" << Z1 << "\t" << "Z2:" << "\t" << Z2 << "\t"
+			<< "\t" << "GAP:" << "\t" << Cplex.getMIPRelativeGap() << "\t"
+			<< "\t" << "CPU time:" << "\t" << time << "\t"
+			<< "\t" << "Nodes:" << "\t" << Cplex.getNnodes() << "\t"
+			<< "\t" << "SECs:" << "\t" << SEC << endl;
 	}
 	else {
 		cerr << "Problemas guardando soluciones " << endl;
@@ -899,7 +947,7 @@ void Guardar(char *nombre, char resultados[50], IloCplex &Cplex, double &time, I
 	salida2.close();
 }
 
-void Graficar_yed(char *nombre, Data &instance, IloCplex &Cplex, IloArray<IloBoolVarArray> &X, IloArray<IloNumVarArray> &f, IloArray<IloBoolVarArray> &y, float &ZZ1, float &ZZ2)
+void Graficar_yed(char *nombre, Data &instance, IloCplex &Cplex, IloArray<IloBoolVarArray> &X, IloArray<IloBoolVarArray> &y, float &ZZ1, float &ZZ2)
 {
 	IloEnv env = Cplex.getEnv();
 	//paso valores de variables
@@ -927,7 +975,7 @@ void Graficar_yed(char *nombre, Data &instance, IloCplex &Cplex, IloArray<IloBoo
 		i++;
 	}
 
-	string archivo_salida = instancia + ".gml";
+	string archivo_salida = instancia + "_" + to_string(w1) + "_" + to_string(w2) + ".gml";
 
 	ofstream gml(archivo_salida, ios::out);
 	double Factorx = 2.2;
